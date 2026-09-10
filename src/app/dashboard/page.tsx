@@ -2,13 +2,18 @@
 import { Store, LogOut, Settings, BarChart3, Edit3, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const supabase = createClient();
 
-  const handleLogout = () => {
-    // Aquí irá la lógica real de Supabase auth.signOut()
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.info('Sesión cerrada correctamente');
     router.push('/login');
+    router.refresh();
   };
 
   return (
@@ -42,15 +47,14 @@ export default function DashboardPage() {
       <main className="flex-1 p-8">
         <header className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Hola, Creador</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Panel de Control</h1>
             <p className="text-slate-500">Aquí está el rendimiento de tu negocio hoy.</p>
           </div>
-          <button className="bg-yellow-400 hover:bg-yellow-500 text-slate-900 px-5 py-2.5 rounded-full font-bold flex items-center gap-2 shadow-sm transition-colors">
-            <Edit3 className="w-4 h-4" /> Editar Tienda
-          </button>
+          <Link href="/crear-tienda" className="bg-yellow-400 hover:bg-yellow-500 text-slate-900 px-5 py-2.5 rounded-full font-bold flex items-center gap-2 shadow-sm transition-colors">
+            <Edit3 className="w-4 h-4" /> Configurar Tienda
+          </Link>
         </header>
 
-        {/* Métricas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {['Ventas de hoy', 'Visitas', 'Pedidos pendientes'].map((title, i) => (
             <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
