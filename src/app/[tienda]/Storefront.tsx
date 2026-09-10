@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ShoppingCart, Search, Menu, Instagram, Facebook, Package, X, Plus, Minus, Loader2 } from 'lucide-react';
+import { ShoppingCart, Search, Menu, Package, X, Plus, Minus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Storefront({ store, productos }: { store: any, productos: any[] }) {
@@ -8,7 +8,6 @@ export default function Storefront({ store, productos }: { store: any, productos
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [loadingCheckout, setLoadingCheckout] = useState(false);
 
-  // Funciones del Carrito
   const addToCart = (producto: any) => {
     setCart(prev => {
       const exists = prev.find(item => item.id === producto.id);
@@ -31,35 +30,25 @@ export default function Storefront({ store, productos }: { store: any, productos
     }));
   };
 
-  const removeFromCart = (id: string) => {
-    setCart(prev => prev.filter(item => item.id !== id));
-  };
-
+  const removeFromCart = (id: string) => setCart(prev => prev.filter(item => item.id !== id));
   const cartTotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const cartItemsCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
-  // Proceso de Pago con Mercado Pago
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setLoadingCheckout(true);
-
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: cart, storeId: store.id })
       });
-
       const data = await res.json();
-      
-      if (data.url) {
-        window.location.href = data.url; // Redirigir al pago de Mercado Pago
-      } else {
-        toast.error(data.error || 'Error al procesar el pago');
-        setLoadingCheckout(false);
-      }
-    } catch (error) {
+      if (data.url) window.location.href = data.url;
+      else toast.error(data.error || 'Error al procesar el pago');
+    } catch {
       toast.error('Error de conexión');
+    } finally {
       setLoadingCheckout(false);
     }
   };
@@ -67,7 +56,7 @@ export default function Storefront({ store, productos }: { store: any, productos
   return (
     <div className="min-h-screen bg-slate-50 font-sans" style={{ '--color-brand': store.theme_color } as React.CSSProperties}>
       
-      {/* Sidebar del Carrito (Oculto por defecto) */}
+      {/* Sidebar del Carrito */}
       {isCartOpen && (
         <div className="fixed inset-0 z-[60] flex justify-end">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
@@ -111,12 +100,7 @@ export default function Storefront({ store, productos }: { store: any, productos
                   <span className="text-slate-500 font-medium">Total a pagar:</span>
                   <span className="text-2xl font-black text-slate-900">${cartTotal.toFixed(2)}</span>
                 </div>
-                <button 
-                  onClick={handleCheckout} 
-                  disabled={loadingCheckout}
-                  className="w-full text-white py-4 rounded-xl font-bold flex justify-center items-center shadow-lg hover:opacity-90 transition-opacity"
-                  style={{ backgroundColor: store.theme_color }}
-                >
+                <button onClick={handleCheckout} disabled={loadingCheckout} className="w-full text-white py-4 rounded-xl font-bold flex justify-center items-center shadow-lg hover:opacity-90 transition-opacity" style={{ backgroundColor: store.theme_color }}>
                   {loadingCheckout ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Pagar con Mercado Pago'}
                 </button>
               </div>
@@ -125,13 +109,18 @@ export default function Storefront({ store, productos }: { store: any, productos
         </div>
       )}
 
-      {/* Header Público */}
+      {/* Header Público con Logo */}
       <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-4">
               <Menu className="w-6 h-6 text-slate-600 sm:hidden cursor-pointer" />
-              <h1 className="text-2xl font-black tracking-tighter" style={{ color: store.theme_color }}>{store.store_name}</h1>
+              {/* RENDERIZADO DEL LOGO O TEXTO */}
+              {store.logo_url ? (
+                <img src={store.logo_url} alt={store.store_name} className="h-10 w-auto object-contain" />
+              ) : (
+                <h1 className="text-2xl font-black tracking-tighter" style={{ color: store.theme_color }}>{store.store_name}</h1>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <button onClick={() => setIsCartOpen(true)} className="relative p-2 text-slate-600 hover:text-slate-900 transition-colors">
@@ -149,6 +138,7 @@ export default function Storefront({ store, productos }: { store: any, productos
 
       {/* Banner */}
       <div className="text-white py-20 px-4 text-center" style={{ backgroundColor: store.theme_color }}>
+        {store.logo_url && <img src={store.logo_url} alt="Logo" className="w-24 h-24 mx-auto mb-6 rounded-full object-cover border-4 border-white shadow-lg bg-white" />}
         <h2 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">{store.store_name}</h2>
         <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">{store.description || 'Explora nuestro catálogo exclusivo.'}</p>
       </div>
