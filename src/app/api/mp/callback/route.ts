@@ -1,49 +1,61 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
-// Esta ruta recibe la respuesta de Mercado Pago después de que el usuario autoriza tu app
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const code = searchParams.get('code');
-  const state = searchParams.get('state'); // Aquí pasaremos el ID del usuario/tienda
+  const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  const error = url.searchParams.get('error');
 
-  if (!code) {
-    return NextResponse.redirect(new URL('/crear-tienda?error=no_code', request.url));
+  const host = request.headers.get('host') || 'tremend-hifb.vercel.app';
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  const redirectUri = `${protocol}://${host}/api/mp/callback`;
+
+  if (error || !code) {
+    return NextResponse.redirect(`${protocol}://${host}/dashboard/ajustes?mp_error=auth_failed`);
   }
 
   try {
-    // 1. Intercambiar el "code" por el "access_token" real usando el Client ID y Secret tuyos
-    const response = await fetch('https://api.mercadopago.com/oauth/token', {
+    const tokenRes = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_secret: process.env.MERCADOPAGO_CLIENT_SECRET || '',
-        client_id: process.env.MERCADOPAGO_CLIENT_ID || '',
-        grant_type: 'authorization_code',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.MERCADOPAGO_CLIENT_ID,
+        client_secret: process.env.MERCADOPAGO_CLIENT_SECRET,
         code: code,
-        redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/mp/callback`
-      })
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+      }),
     });
 
-    const data = await response.json();
+    const tokenData = await tokenRes.json();
 
-    if (data.access_token && state) {
-      // 2. Guardar el access_token en la tienda del usuario en Supabase
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-
-      await supabase
-        .from('stores')
-        .update({ mp_access_token: data.access_token })
-        .eq('owner_id', state);
-        
-      return NextResponse.redirect(new URL('/dashboard?success=mp_connected', request.url));
+    if (!tokenRes.ok || !tokenData.access_token) {
+      console.error('Error token MP:', tokenData);
+      return NextResponse.redirect(`${protocol}://${host}/dashboard/ajustes?mp_error=token_failed`);
     }
 
-    return NextResponse.redirect(new URL('/dashboard?error=mp_failed', request.url));
-  } catch (error) {
-    return NextResponse.redirect(new URL('/dashboard?error=server_error', request.url));
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from('stores')
+        .update({
+          mercadopago_access_token: tokenData.access_token,
+          mercadopago_user_id: String(tokenData.user_id || ''),
+        })
+        .eq('owner_id', user.id);
+    }
+
+    return NextResponse.redirect(`${protocol}://${host}/dashboard/exito?mp=connected`);
+  } catch (err) {
+    console.error('Excepcion en MP callback:', err);
+    return NextResponse.redirect(`${protocol}://${host}/dashboard/ajustes?mp_error=exception`);
   }
 }
