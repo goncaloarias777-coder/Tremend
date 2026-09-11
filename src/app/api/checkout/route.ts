@@ -1,67 +1,61 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    const { items, storeId } = await request.json();
-    
-    // Conectar a Supabase para buscar las credenciales de la tienda
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    
-    // Obtener el Access Token de Mercado Pago del dueño de esta tienda
-    const { data: store } = await supabase
-      .from('stores')
-      .select('mp_access_token, slug')
-      .eq('id', storeId)
-      .single();
-      
-    if (!store || !store.mp_access_token) {
-      return NextResponse.json({ error: 'La tienda no tiene Mercado Pago vinculado' }, { status: 400 });
+    const body = await req.json();
+    const { items, store_id } = body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'El carrito está vacío o no es válido' }, { status: 400 });
     }
 
-    // Armar los items para Mercado Pago
-    const preferenceItems = items.map((item: any) => ({
-      title: item.name,
-      unit_price: Number(item.price),
-      quantity: item.quantity,
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Falta configurar MERCADOPAGO_ACCESS_TOKEN en las variables de entorno de Vercel' }, { status: 500 });
+    }
+
+    // Inicializar cliente de Mercado Pago v2/v3
+    const client = new MercadoPagoConfig({ accessToken });
+    const preference = new Preference(client);
+
+    // Mapear y asegurar que los tipos sean estrictamente correctos (números para precios y cantidades)
+    const formattedItems = items.map((item: any) => ({
+      id: String(item.id || 'prod_1'),
+      title: String(item.name || 'Producto'),
+      quantity: Number(item.cantidad || 1),
+      unit_price: Number(item.price || 0),
       currency_id: 'ARS'
     }));
 
-    // URL de retorno exitoso/fallido a la tienda
-    const storeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${store.slug}`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tremend-hifb.vercel.app';
 
-    // Crear la preferencia directo contra la API de MP usando el token de la tienda
-    const mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${store.mp_access_token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        items: preferenceItems,
+    // Crear la preferencia en Mercado Pago
+    const result = await preference.create({
+      body: {
+        items: formattedItems,
         back_urls: {
-          success: storeUrl,
-          failure: storeUrl,
-          pending: storeUrl
+          success: `${baseUrl}/pago/exito`,
+          failure: `${baseUrl}/pago/fallo`,
+          pending: `${baseUrl}/pago/pendiente`,
         },
-        auto_return: 'approved'
-      })
+        auto_return: 'approved',
+        external_reference: String(store_id || '')
+      }
     });
 
-    const mpResult = await mpResponse.json();
+    const initPoint = result.init_point || (result as any).body?.init_point;
 
-    if (mpResult.id) {
-      // Devolver el init_point (La URL de pago de MP)
-      return NextResponse.json({ url: mpResult.init_point });
-    } else {
-      console.error(mpResult);
-      return NextResponse.json({ error: 'Fallo al contactar con Mercado Pago' }, { status: 400 });
+    if (!initPoint) {
+      throw new Error('No se pudo generar el link de pago de Mercado Pago');
     }
 
-  } catch (error) {
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+    return NextResponse.json({ init_point: initPoint });
+
+  } catch (error: any) {
+    console.error('Error detallado en Mercado Pago Checkout:', error);
+    return NextResponse.json({ 
+      error: error.message || 'Error desconocido al procesar con Mercado Pago' 
+    }, { status: 400 });
   }
 }
