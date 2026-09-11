@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Store, Package, Settings, BarChart3, LogOut, ArrowUpRight, DollarSign, Users, ShoppingCart, Menu, X } from 'lucide-react'
+import { Store, Package, Settings, BarChart3, LogOut, ArrowUpRight, DollarSign, Users, ShoppingCart, Menu, X, Globe } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function DashboardPage() {
@@ -24,18 +24,20 @@ export default function DashboardPage() {
         return
       }
 
+      // Buscamos usando owner_id que es la clave correcta de la tabla stores
       const { data, error } = await supabase
         .from('stores')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('owner_id', user.id)
         .single()
 
       if (error || !data) {
+        // Si no tiene tienda creada, lo mandamos a crear una
         router.push('/crear-tienda')
       } else {
         setStore(data)
+        setLoading(false)
       }
-      setLoading(false)
     }
     fetchStore()
   }, [router, supabase])
@@ -68,7 +70,7 @@ export default function DashboardPage() {
         </div>
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 text-slate-300 hover:text-white rounded-lg bg-slate-700/50"
+          className="p-2 text-slate-300 hover:text-white rounded-lg bg-slate-700/50 cursor-pointer"
         >
           {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
@@ -110,9 +112,10 @@ export default function DashboardPage() {
               href={`/${store.slug}`} 
               target="_blank" 
               rel="noopener noreferrer"
-              className="flex items-center justify-between w-full px-3.5 py-2.5 bg-slate-700/40 hover:bg-slate-700 rounded-xl text-xs font-semibold text-indigo-300 transition"
+              className="flex items-center justify-between w-full px-3.5 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 rounded-xl text-xs font-semibold text-indigo-300 transition"
             >
-              Ver mi Tienda Pública <ArrowUpRight className="w-4 h-4" />
+              <span className="flex items-center gap-2"><Globe className="w-4 h-4" /> Ver mi Tienda</span> 
+              <ArrowUpRight className="w-4 h-4" />
             </a>
           )}
           <button 
@@ -141,12 +144,24 @@ export default function DashboardPage() {
               <h1 className="text-xl sm:text-2xl font-black text-white">Panel de Control</h1>
               <p className="text-xs sm:text-sm text-slate-400 mt-1">Aquí está el resumen del rendimiento de tu negocio hoy.</p>
             </div>
-            <Link 
-              href="/dashboard/ajustes" 
-              className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md shadow-amber-400/20"
-            >
-              Configurar Tienda
-            </Link>
+            <div className="flex items-center gap-3">
+              {store?.slug && (
+                <a 
+                  href={`/${store.slug}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md shadow-indigo-600/30"
+                >
+                  <Globe className="w-4 h-4" /> Ver Tienda
+                </a>
+              )}
+              <Link 
+                href="/dashboard/ajustes" 
+                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md shadow-amber-400/20"
+              >
+                Configurar
+              </Link>
+            </div>
           </div>
 
           {/* Tarjetas de Métricas Responsivas */}
